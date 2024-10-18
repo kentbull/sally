@@ -15,8 +15,6 @@ def main():
     try:
         args.handler(args)
     except Exception as ex:
-        # print(f"ERR: {ex}")
-        # return -1
         raise ex
 
 

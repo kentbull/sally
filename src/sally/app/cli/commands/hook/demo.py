@@ -1,9 +1,10 @@
 # -*- encoding: utf-8 -*-
 """
-sally.cli.commands module
+sally.cli.commands.hook.demo module
 
 """
 import argparse
+import datetime
 import logging
 
 import falcon
@@ -58,6 +59,23 @@ class Listener:
             rep: falcon.Response HTTP response
 
         """
+        body = req.get_media()
+        match body['action']:
+            case 'iss':
+                logger.info(f"Gatekeeper | Valid Credential. Validated at {datetime.datetime.now()}")
+                self.debug_request(req, body)
+            case 'rev':
+                schema_said = body['data']['schema']
+                cred_said = body['data']['credential']
+                revocation_timestamp = body['data']['revocationTimestamp']
+                logger.info(
+                    f"Gatekeeper | Invalid credential {cred_said} with schema {schema_said}. Revoked on: {revocation_timestamp}")
+                self.debug_request(req, body)
+            case _:
+                logger.error(f"Gatekeeper | Unknown action: {body['action']}")
+                self.debug_request(req, body)
+
+    def debug_request(self, req, body):
         logger.info("** HEADERS **")
         logger.info(req.headers)
         logger.info("*************")
