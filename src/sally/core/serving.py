@@ -9,6 +9,7 @@ Endpoint service
 import falcon
 from base64 import urlsafe_b64encode as encodeB64
 
+from hio import base
 from hio.base import doing
 from hio.core import http
 from hio.help import decking
@@ -22,11 +23,12 @@ from keri.vdr.eventing import Tevery
 from keri.vc import protocoling
 
 from sally.core import handling, basing
+from sally.handlers.mappings import SchemaMapping
 
 logger = help.ogler.getLogger()
 
 
-def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3):
+def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3, schema_mappings=[]):
     """ Setup serving package and endpoints
 
     Parameters:
@@ -38,7 +40,7 @@ def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3
         listen (bool): flag indicating whether the agent listens persistently or polls mailboxes
         timeout (int): escrow timeout (in minutes) for events not delivered to upstream web hook
         retry (int): retry delay (in seconds) for failed web hook attempts
-
+        schema_mappings (list): mappings of credential types to schema SAIDs for selecting validation and handler functions
     """
     # make hab
     hab = hby.habByName(name=alias)
@@ -60,7 +62,8 @@ def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3
                                   auth=auth,
                                   hook=hook,
                                   timeout=timeout,
-                                  retry=retry)
+                                  retry=retry,
+                                  schema_mappings=schema_mappings)
 
     rvy = routing.Revery(db=hby.db)
 
@@ -90,6 +93,8 @@ def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3
     httpServerDoer = http.ServerDoer(server=server)
 
     ending.loadEnds(app, hby=hby, default=hab.pre)
+    app.add_route('/credential-mappings',
+                  RegisterCredToPrefixMappingEnd(tymth=None, hby=hby, communicator=comms))
 
     doers = [httpServerDoer, comms, tc]
     if listen:
@@ -109,6 +114,51 @@ def setup(hby, *, alias, httpPort, hook, auth, listen=False, timeout=10, retry=3
         doers.append(mbd)
 
     return doers
+
+# Maps a credential name (credential_type) to a self addressing identifier (SAID/said)
+
+
+
+class RegisterCredToPrefixMappingEnd(base.Tymee):
+    """
+    ReST API for adding a credential type to prefix mapping
+    """
+
+    def __init__(self, hby, communicator, **kwa):
+        """
+        Parameters:
+            hab (habbing.Hab):  instance of local habitat
+            tymth (function): tymth for superclass (inherited)
+        """
+        super(RegisterCredToPrefixMappingEnd, self).__init__(**kwa)
+        self.hby = hby
+        self.communicator = communicator
+
+    def on_get(self, req, rep):
+        """
+        Handles GET requests
+        """
+        message = "\nKERI Service Endpoints\n\n"
+        rep.status = falcon.HTTP_200  # This is the default status
+        rep.content_type = "text/html"
+        rep.text = message
+
+    def on_put(self, req, rep):
+        """
+        Handles PUT requests
+        """
+        logger.info('received request')
+        body = req.get_media()
+        mappings = read_mappings(body)
+        logger.info(f'mappings received {mappings}')
+        rep.status = falcon.HTTP_200  # This is the default status
+        rep.content_type = "text/plain"
+        rep.text = f'Received {len(mappings)} mappings'
+        self.communicator.mappings = mappings
+
+
+def read_mappings(body: dict) -> list[SchemaMapping]:
+    return [SchemaMapping(**k) for k in body["mappings"]]
 
 
 class TeveryCuery(doing.Doer):

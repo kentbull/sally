@@ -4,12 +4,16 @@ sally.cli.commands module
 
 """
 import argparse
+import json
 import logging
 
 from keri import help
 from keri.app import keeping, habbing, directing, configing, oobiing
 from keri.app.cli.common import existing
+
+import sally
 from sally.core import serving
+from sally.handlers.mappings import SchemaMapping
 
 help.ogler.level = logging.getLevelName(logging.INFO)
 logger = help.ogler.getLogger()
@@ -52,6 +56,9 @@ parser.add_argument('--config-file',
 parser.add_argument('--auth', help='AID or alias of authority for OOBIs and QVI credential issuer', action="store",
                     required=True)
 parser.add_argument('--listen', '-l', help='run SALLY in direct HTTP mode listening for events', action="store_true")
+parser.add_argument('--schema-mappings', '-s', dest="schemaMappings",
+                    help='JSON file mapping schema SAIDs to type names to select validators and payload handlers.',
+                    required=True)
 
 
 def launch(args, expire=0.0):
@@ -67,6 +74,9 @@ def launch(args, expire=0.0):
     bran = args.bran
     http_port = args.http
     auth = args.auth
+    mappings_path = args.schemaMappings
+    with open(mappings_path, 'r') as mappings_file:
+        schema_mappings = read_mappings(json.load(mappings_file))
 
     listen = args.listen
     timeout = args.escrow_timeout
@@ -103,7 +113,10 @@ def launch(args, expire=0.0):
     doers = [hbyDoer, *obl.doers]
 
     doers += serving.setup(hby, alias=alias, httpPort=http_port, hook=hook, auth=auth,
-                           listen=listen, timeout=timeout, retry=retry)
+                           listen=listen, timeout=timeout, retry=retry, schema_mappings=schema_mappings)
 
-    logger.info(f"Sally Server listening on {http_port}")
+    logger.info(f"Sally Gatekeeper v{sally.__version__} Server listening on {http_port}")
     directing.runController(doers=doers, expire=expire)
+
+def read_mappings(json: dict) -> list[SchemaMapping]:
+    return [SchemaMapping(**k) for k in json["mappings"]]
